@@ -172,7 +172,80 @@ class _PaymentPageState extends State<PaymentPage>{
     ]));
 }
 
-class AdminPage extends StatelessWidget {
+class SignupPage extends StatelessWidget {
+  const SignupPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('নতুন সদস্য নিবন্ধন'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(18),
+        child: ListView(
+          children: [
+            const Text(
+              'নতুন সদস্য তৈরি করুন',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            const TextField(
+              decoration: InputDecoration(
+                labelText: 'পূর্ণ নাম',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            const TextField(
+              decoration: InputDecoration(
+                labelText: 'মোবাইল নম্বর',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            const TextField(
+              decoration: InputDecoration(
+                labelText: 'ইমেইল',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            const TextField(
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'পাসওয়ার্ড',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              height: 52,
+              child: FilledButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('নিবন্ধন প্রক্রিয়া প্রস্তুত করা হয়েছে'),
+                    ),
+                  );
+                },
+                child: const Text('Signup'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+} class AdminPage extends StatelessWidget {
   const AdminPage({super.key});
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Admin Panel')),

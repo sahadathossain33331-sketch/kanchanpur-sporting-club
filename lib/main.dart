@@ -48,7 +48,15 @@ class LoginPage extends StatelessWidget {
         SizedBox(width:double.infinity,height:52,child:FilledButton(
           onPressed:()=>Navigator.pushReplacement(context,MaterialPageRoute(builder:(_)=>const HomePage())),
           child:const Text('Login'))),
-        TextButton(onPressed:(){},child:const Text('নতুন সদস্য? Signup করুন')),
+        TextButton(
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SignupPage()),
+    );
+  },
+  child: const Text('নতুন সদস্য? Signup করুন'),
+),
       ]),
     ))),
   );

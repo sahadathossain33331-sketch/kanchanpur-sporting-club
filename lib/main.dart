@@ -52,7 +52,7 @@ class LoginPage extends StatelessWidget {
   onPressed: () {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const SignupPage()),
+      MaterialPageRoute(builder: (_) => SignupPage()),
     );
   },
   child: const Text('নতুন সদস্য? Signup করুন'),

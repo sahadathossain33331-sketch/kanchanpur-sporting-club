@@ -172,7 +172,200 @@ class _PaymentPageState extends State<PaymentPage>{
     ]));
 }
 
-class SignupPage extends StatelessWidget {
+class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
+
+  @override
+  State<SignupPage> createState() => _SignupPageState();
+}
+
+class _SignupPageState extends State<SignupPage> {
+  final nameController = TextEditingController();
+  final phoneController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  bool loading = false;
+
+  Future<void> signup() async {
+    final name = nameController.text.trim();
+    final phone = phoneController.text.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (name.isEmpty ||
+        phone.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('সব তথ্য পূরণ করুন'),
+        ),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      loading = true;
+    });
+
+    try {
+      final response = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'full_name': name,
+          'phone': phone,
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        loading = false;
+      });
+
+      if (response.user != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('নিবন্ধন সফল হয়েছে। এখন Login করুন।'),
+          ),
+        );
+
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const LoginPage(),
+          ),
+        );
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        loading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        loading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('নিবন্ধন করা যায়নি: $e'),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('নতুন সদস্য নিবন্ধন'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(18),
+        child: ListView(
+          children: [
+            const Text(
+              'নতুন সদস্য তৈরি করুন',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'পূর্ণ নাম',
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'মোবাইল নম্বর',
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'ইমেইল',
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'পাসওয়ার্ড',
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            SizedBox(
+              height: 52,
+              child: FilledButton(
+                onPressed: loading ? null : signup,
+                child: loading
+                    ? const CircularProgressIndicator()
+                    : const Text('Signup'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
   const SignupPage({super.key});
 
   @override

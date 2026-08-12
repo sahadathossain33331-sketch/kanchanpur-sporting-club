@@ -97,21 +97,35 @@ class _AppControllerState extends State<AppController> {
           .eq('id', current.id)
           .maybeSingle();
 
-      if (!mounted) return;
-      setState(() {
-        user = current;
-        profile = row;
-        loading = false;
-      });
+      if (row == null) {
+  await supabase.auth.signOut();
+
+  if (mounted) {
+    setState(() {
+      user = null;
+      profile = null;
+      loading = false;
+    });
+  }
+  return;
+}
+
+if (!mounted) return;
+
+setState(() {
+  user = current;
+  profile = row;
+  loading = false;
+});
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          user = current;
-          profile = null;
-          loading = false;
-        });
-      }
-    }
+  if (mounted) {
+    setState(() {
+      user = null;
+      profile = null;
+      loading = false;
+    });
+  }
+}
   }
 
   @override

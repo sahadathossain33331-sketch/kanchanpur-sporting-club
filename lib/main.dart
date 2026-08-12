@@ -82,6 +82,46 @@ class _AuthPageState extends State<AuthPage> {
       );
   }
 
+  // ------------------------------------------------------
+  // Supabase request
+  // ------------------------------------------------------
+  Future<http.Response> sendRequest(
+    Map<String, dynamic> body,
+  ) async {
+    final uri = Uri.parse(functionUrl);
+
+    // প্রথম চেষ্টা
+    try {
+      return await http
+          .post(
+            uri,
+            headers: const {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'Kanchanpur-Sporting-Club/1.0',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 20));
+    } catch (e) {
+      // প্রথম request ব্যর্থ হলে 2 সেকেন্ড অপেক্ষা
+      // করে দ্বিতীয়বার চেষ্টা করবে।
+      await Future.delayed(const Duration(seconds: 2));
+
+      return await http
+          .post(
+            uri,
+            headers: const {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'Kanchanpur-Sporting-Club/1.0',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30));
+    }
+  }
+
   Future<void> submit() async {
     if (loading) return;
 
@@ -124,16 +164,7 @@ class _AuthPageState extends State<AuthPage> {
         body['name'] = userName;
       }
 
-      final response = await http
-          .post(
-            Uri.parse(functionUrl),
-            headers: const {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 30));
+      final response = await sendRequest(body);
 
       Map<String, dynamic> data = {};
 
@@ -147,7 +178,9 @@ class _AuthPageState extends State<AuthPage> {
 
       if (!mounted) return;
 
+      // --------------------------------------------------
       // সফল
+      // --------------------------------------------------
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
           data['success'] == true) {
@@ -186,17 +219,21 @@ class _AuthPageState extends State<AuthPage> {
         );
       }
     } on http.ClientException catch (e) {
-      showMessage('Network error: ${e.message}');
+      showMessage(
+        'Network error: ${e.message}\nআবার চেষ্টা করুন।',
+      );
     } catch (e) {
       final error = e.toString();
 
       if (error.contains('Failed host lookup')) {
         showMessage(
-          'Supabase server খুঁজে পাওয়া যাচ্ছে না। Internet connection পরীক্ষা করুন।',
+          'Supabase server খুঁজে পাওয়া যাচ্ছে না। '
+          'Mobile data/Wi-Fi পরিবর্তন করে আবার চেষ্টা করুন।',
         );
       } else if (error.contains('TimeoutException')) {
         showMessage(
-          'Server response দিতে বেশি সময় নিচ্ছে। আবার চেষ্টা করুন।',
+          'Server response দিতে বেশি সময় নিচ্ছে। '
+          'কিছুক্ষণ পর আবার চেষ্টা করুন।',
         );
       } else {
         showMessage('Connection error: $e');

@@ -67,13 +67,17 @@ class _AppControllerState extends State<AppController> {
   void initState() {
     super.initState();
     _loadSession();
+
     supabase.auth.onAuthStateChange.listen((data) {
       if (!mounted) return;
+
       if (data.event == AuthChangeEvent.signedIn ||
           data.event == AuthChangeEvent.initialSession ||
           data.event == AuthChangeEvent.tokenRefreshed) {
         _loadSession();
-      } else if (data.event == AuthChangeEvent.signedOut) {
+      }
+
+      if (data.event == AuthChangeEvent.signedOut) {
         setState(() {
           user = null;
           profile = null;
@@ -85,8 +89,15 @@ class _AppControllerState extends State<AppController> {
 
   Future<void> _loadSession() async {
     final current = supabase.auth.currentUser;
+
     if (current == null) {
-      if (mounted) setState(() => loading = false);
+      if (mounted) {
+        setState(() {
+          user = null;
+          profile = null;
+          loading = false;
+        });
+      }
       return;
     }
 
@@ -97,60 +108,83 @@ class _AppControllerState extends State<AppController> {
           .eq('id', current.id)
           .maybeSingle();
 
+      // Auth user আছে কিন্তু profiles-এ account নেই।
+      // তাই কখনোই Home Page খুলবে না।
       if (row == null) {
-  await supabase.auth.signOut();
+        await supabase.auth.signOut();
 
-  if (mounted) {
-    setState(() {
-      user = null;
-      profile = null;
-      loading = false;
-    });
-  }
-  return;
-}
+        if (mounted) {
+          setState(() {
+            user = null;
+            profile = null;
+            loading = false;
+          });
+        }
+        return;
+      }
 
-if (!mounted) return;
+      if (!mounted) return;
 
-setState(() {
-  user = current;
-  profile = row;
-  loading = false;
-});
+      setState(() {
+        user = current;
+        profile = Map<String, dynamic>.from(row);
+        loading = false;
+      });
+    } on AuthException catch (_) {
+      await supabase.auth.signOut();
+
+      if (mounted) {
+        setState(() {
+          user = null;
+          profile = null;
+          loading = false;
+        });
+      }
     } catch (_) {
-  if (mounted) {
-    setState(() {
-      user = null;
-      profile = null;
-      loading = false;
-    });
-  }
-}
+      // Internet / Supabase connection সমস্যা হলে
+      // কোনোভাবেই Home Page খুলবে না।
+      if (mounted) {
+        setState(() {
+          user = null;
+          profile = null;
+          loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
-    if (user == null) return const AuthPage();
+    // Auth সফল না হলে Login Page
+    if (user == null || profile == null) {
+      return const AuthPage();
+    }
 
-    final isAdmin = profile?['role'] == 'admin';
+    final isAdmin = profile!['role']?.toString() == 'admin';
 
     if (isAdmin) {
       return AdminHomePage(
-        username: profile?['name']?.toString() ?? 'Admin',
-        onLogout: () => supabase.auth.signOut(),
+        username: profile!['name']?.toString() ?? 'Admin',
+        onLogout: () async {
+          await supabase.auth.signOut();
+        },
       );
     }
 
     return HomePage(
-      username: profile?['name']?.toString() ?? 'Member',
-      phone: profile?['phone']?.toString() ?? '',
-      onLogout: () => supabase.auth.signOut(),
+      username: profile!['name']?.toString() ?? 'Member',
+      phone: profile!['phone']?.toString() ?? '',
+      onLogout: () async {
+        await supabase.auth.signOut();
+      },
     );
   }
 }
@@ -181,20 +215,35 @@ class _AuthPageState extends State<AuthPage> {
 
   String normalizePhone(String value) {
     var p = value.trim().replaceAll(RegExp(r'[\s-]'), '');
-    if (p.startsWith('+88')) p = p.substring(3);
-    if (p.startsWith('88') && p.length == 13) p = p.substring(2);
+
+    if (p.startsWith('+88')) {
+      p = p.substring(3);
+    }
+
+    if (p.startsWith('88') && p.length == 13) {
+      p = p.substring(2);
+    }
+
     return p;
   }
 
-  String authEmail(String mobile) => '${normalizePhone(mobile)}@ksc.app';
+  String authEmail(String mobile) {
+    return '${normalizePhone(mobile)}@ksc.app';
+  }
 
   Future<void> submit() async {
     final username = name.text.trim();
     final mobile = normalizePhone(phone.text);
     final pass = password.text;
 
-    if (username.isEmpty || mobile.isEmpty || pass.isEmpty) {
-      _msg('সব তথ্য পূরণ করুন।');
+    // Signup-এর সময় Username বাধ্যতামূলক
+    if (signup && username.isEmpty) {
+      _msg('Username দিন।');
+      return;
+    }
+
+    if (mobile.isEmpty || pass.isEmpty) {
+      _msg('Mobile Number ও Password দিন।');
       return;
     }
 
@@ -208,12 +257,20 @@ class _AuthPageState extends State<AuthPage> {
       return;
     }
 
-    setState(() => busy = true);
+    if (busy) return;
+
+    setState(() {
+      busy = true;
+    });
 
     try {
       final email = authEmail(mobile);
 
       if (signup) {
+        // =========================
+        // নতুন Account তৈরি
+        // =========================
+
         final result = await supabase.auth.signUp(
           email: email,
           password: pass,
@@ -224,11 +281,12 @@ class _AuthPageState extends State<AuthPage> {
         );
 
         final created = result.user;
+
         if (created == null) {
           throw Exception('Account তৈরি করা যায়নি।');
         }
 
-        // If email confirmation is disabled, the user is logged in immediately.
+        // Email confirmation বন্ধ থাকলে সরাসরি session পাওয়া যাবে
         if (result.session != null) {
           await supabase.from('profiles').upsert({
             'id': created.id,
@@ -236,36 +294,91 @@ class _AuthPageState extends State<AuthPage> {
             'phone': mobile,
             'role': 'member',
           });
-          _msg('Account তৈরি হয়েছে।');
+
+          if (!mounted) return;
+
+          _msg('Account সফলভাবে তৈরি হয়েছে।');
         } else {
+          if (!mounted) return;
+
           _msg(
-            'Account তৈরি হয়েছে। Supabase Email Confirmation চালু থাকলে '
-            'confirmation সম্পন্ন করে Login করুন।',
+            'Account তৈরি হয়েছে। Email confirmation সম্পন্ন করে Login করুন।',
           );
-          setState(() => signup = false);
+
+          setState(() {
+            signup = false;
+          });
         }
       } else {
+        // =========================
+        // Login
+        // =========================
+
+        // পুরোনো session থাকলে আগে সম্পূর্ণ Sign Out
+        await supabase.auth.signOut();
+
+        // Supabase Authentication দিয়ে সত্যিকারের Login
         final result = await supabase.auth.signInWithPassword(
           email: email,
           password: pass,
         );
 
-        if (result.user == null) throw Exception('Login ব্যর্থ হয়েছে।');
+        final loggedUser = result.user;
+
+        // Supabase authentication সফল না হলে Home Page নয়
+        if (loggedUser == null || result.session == null) {
+          throw Exception('Mobile Number অথবা Password ভুল।');
+        }
+
+        // Login সফল হলেও profiles-এ account না থাকলে Home Page নয়
+        final profileRow = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', loggedUser.id)
+            .maybeSingle();
+
+        if (profileRow == null) {
+          await supabase.auth.signOut();
+          throw Exception(
+            'এই account-এর profile পাওয়া যায়নি। Admin-এর সাথে যোগাযোগ করুন।',
+          );
+        }
+
+        if (!mounted) return;
+
         _msg('Login সফল হয়েছে।');
       }
     } on AuthException catch (e) {
-      _msg(e.message);
+      if (mounted) {
+        _msg(
+          e.message.isEmpty
+              ? 'Mobile Number অথবা Password ভুল।'
+              : e.message,
+        );
+      }
     } catch (e) {
-      _msg(e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        _msg(
+          e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
     }
   }
 
   void _msg(String text) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
+      SnackBar(
+        content: Text(text),
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 
@@ -277,12 +390,17 @@ class _AuthPageState extends State<AuthPage> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              constraints: const BoxConstraints(
+                maxWidth: 520,
+              ),
               child: Column(
                 children: [
                   const SizedBox(height: 20),
+
                   const _Logo(size: 105),
+
                   const SizedBox(height: 14),
+
                   const Text(
                     'কাঞ্চনপুর স্পোর্টিং ক্লাব',
                     textAlign: TextAlign.center,
@@ -291,52 +409,75 @@ class _AuthPageState extends State<AuthPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+
                   const SizedBox(height: 5),
+
                   const Text(
                     'এটি একটি ক্রীড়া ও সেচ্ছাসেবী সংগঠন',
                     textAlign: TextAlign.center,
                   ),
+
                   const SizedBox(height: 30),
+
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
                           Text(
-                            signup ? 'নতুন একাউন্ট খুলুন' : 'Login করুন',
+                            signup
+                                ? 'নতুন একাউন্ট খুলুন'
+                                : 'Login করুন',
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+
                           const SizedBox(height: 20),
-                          TextField(
-                            controller: name,
-                            decoration: const InputDecoration(
-                              labelText: 'Username',
-                              prefixIcon: Icon(Icons.person_outline),
+
+                          if (signup) ...[
+                            TextField(
+                              controller: name,
+                              decoration: const InputDecoration(
+                                labelText: 'Username',
+                                prefixIcon: Icon(
+                                  Icons.person_outline,
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
+
+                            const SizedBox(height: 12),
+                          ],
+
                           TextField(
                             controller: phone,
                             keyboardType: TextInputType.phone,
                             decoration: const InputDecoration(
                               labelText: 'Mobile Number',
-                              prefixIcon: Icon(Icons.phone_outlined),
+                              prefixIcon: Icon(
+                                Icons.phone_outlined,
+                              ),
                               hintText: '01XXXXXXXXX',
                             ),
                           ),
+
                           const SizedBox(height: 12),
+
                           TextField(
                             controller: password,
                             obscureText: hidePassword,
                             decoration: InputDecoration(
                               labelText: 'Password',
-                              prefixIcon: const Icon(Icons.lock_outline),
+                              prefixIcon: const Icon(
+                                Icons.lock_outline,
+                              ),
                               suffixIcon: IconButton(
-                                onPressed: () =>
-                                    setState(() => hidePassword = !hidePassword),
+                                onPressed: () {
+                                  setState(() {
+                                    hidePassword = !hidePassword;
+                                  });
+                                },
                                 icon: Icon(
                                   hidePassword
                                       ? Icons.visibility
@@ -345,22 +486,39 @@ class _AuthPageState extends State<AuthPage> {
                               ),
                             ),
                           ),
+
                           const SizedBox(height: 18),
+
                           SizedBox(
                             width: double.infinity,
                             height: 52,
                             child: FilledButton(
                               onPressed: busy ? null : submit,
                               child: busy
-                                  ? const CircularProgressIndicator()
-                                  : Text(signup ? 'Signup' : 'Login'),
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child:
+                                          CircularProgressIndicator(),
+                                    )
+                                  : Text(
+                                      signup
+                                          ? 'Signup'
+                                          : 'Login',
+                                    ),
                             ),
                           ),
+
                           const SizedBox(height: 10),
+
                           TextButton(
                             onPressed: busy
                                 ? null
-                                : () => setState(() => signup = !signup),
+                                : () {
+                                    setState(() {
+                                      signup = !signup;
+                                    });
+                                  },
                             child: Text(
                               signup
                                   ? 'আগে account থাকলে Login করুন'

@@ -1,1288 +1,450 @@
-import 'dart:io';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 
-const supabaseUrl = 'https://vleaqmiyihlginevgfmw.supabase.co';
-const supabaseAnonKey =
-    'sb_publishable_7D6mwaP16HzmYQTtr71icQ__JksJ9KJ';
-
-const edgeFunctionName = 'hyper-function';
-
-// Admin-এর Phone Number
-const adminPhone = '01897173332';
-
-final supabase = Supabase.instance.client;
-
-String normalizePhone(String phone) {
-  var p = phone.trim().replaceAll(RegExp(r'[^\d+]'), '');
-  if (p.startsWith('+')) p = p.substring(1);
-  if (p.startsWith('880')) return p;
-  if (p.startsWith('0')) return '88$p';
-  return p;
+void main() {
+  runApp(const ClubApp());
 }
 
-String phoneLoginEmail(String phone) {
-  return '${normalizePhone(phone)}@phone-login.local';
-}
+const String functionUrl =
+    'https://vleaqmiyihlginevgfmw.supabase.co/functions/v1/hyper-function';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
-  );
-
-  runApp(const KanchanpurApp());
-}
-
-class KanchanpurApp extends StatelessWidget {
-  const KanchanpurApp({super.key});
+class ClubApp extends StatelessWidget {
+  const ClubApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'কাঞ্চনপুর স্পোর্টিং ক্লাব',
+      title: 'Kanchanpur Sporting Club',
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF283593),
+        colorSchemeSeed: Colors.indigo,
+        scaffoldBackgroundColor: const Color(0xFFF8F7FC),
       ),
-      home: const AuthGate(),
+      home: const AuthPage(),
     );
   }
 }
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+class AuthPage extends StatefulWidget {
+  const AuthPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    if (supabase.auth.currentSession != null) {
-      return const HomePage();
-    }
-    return const LoginPage();
-  }
+  State<AuthPage> createState() => _AuthPageState();
 }
 
-// ============================================================
-// LOGIN
-// ============================================================
-
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
-
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
-
-class _LoginPageState extends State<LoginPage> {
-  final phone = TextEditingController();
-  final password = TextEditingController();
+class _AuthPageState extends State<AuthPage> {
+  bool isLogin = false;
   bool loading = false;
-  bool obscure = true;
+  bool hidePassword = true;
 
-  Future<void> login() async {
-    final phoneText = phone.text.trim();
-    final passwordText = password.text;
-
-    if (phoneText.isEmpty || passwordText.isEmpty) {
-      showMsg('Phone Number ও Password দিন।');
-      return;
-    }
-
-    if (passwordText.length < 6) {
-      showMsg('Password কমপক্ষে ৬ অক্ষরের হতে হবে।');
-      return;
-    }
-
-    setState(() => loading = true);
-
-    try {
-      final response = await supabase.functions.invoke(
-        edgeFunctionName,
-        body: {
-          'action': 'login',
-          'phone': phoneText,
-          'password': passwordText,
-        },
-      );
-
-      if (response.data is! Map) {
-        showMsg('Server থেকে সঠিক response পাওয়া যায়নি।');
-        return;
-      }
-
-      final data = Map<String, dynamic>.from(response.data as Map);
-
-      if (data['success'] != true) {
-        showMsg(
-          data['error']?.toString() ??
-              'Phone Number অথবা Password ভুল।',
-        );
-        return;
-      }
-
-      final rawSession = data['session'];
-      if (rawSession is! Map) {
-        showMsg('Login session পাওয়া যায়নি।');
-        return;
-      }
-
-      final session = Map<String, dynamic>.from(rawSession);
-      final refreshToken = session['refresh_token']?.toString();
-
-      if (refreshToken == null || refreshToken.isEmpty) {
-        showMsg('Login refresh token পাওয়া যায়নি।');
-        return;
-      }
-
-      await supabase.auth.setSession(refreshToken);
-
-      if (!mounted) return;
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
-        (route) => false,
-      );
-    } on FunctionException catch (e) {
-      showMsg('Login server error: ${e.details ?? e.reasonPhrase}');
-    } on AuthException catch (e) {
-      showMsg(e.message);
-    } catch (e) {
-      showMsg('Login করা যায়নি। আবার চেষ্টা করুন।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
+  final nameController = TextEditingController();
+  final phoneController = TextEditingController();
+  final passwordController = TextEditingController();
 
   @override
   void dispose() {
-    phone.dispose();
-    password.dispose();
+    nameController.dispose();
+    phoneController.dispose();
+    passwordController.dispose();
     super.dispose();
+  }
+
+  // 01XXXXXXXXX / 8801XXXXXXXXX / +8801XXXXXXXXX
+  // সবগুলোকে 01XXXXXXXXX এ রূপান্তর করবে।
+  String normalizePhone(String value) {
+    var phone = value.trim().replaceAll(RegExp(r'[\s-]'), '');
+
+    if (phone.startsWith('+880')) {
+      phone = '0${phone.substring(4)}';
+    }
+
+    if (phone.startsWith('880')) {
+      phone = '0${phone.substring(3)}';
+    }
+
+    return phone;
+  }
+
+  void showMessage(String text, {bool success = false}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor:
+              success ? Colors.green.shade700 : Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  Future<void> submit() async {
+    if (loading) return;
+
+    final userName = nameController.text.trim();
+    final phone = normalizePhone(phoneController.text);
+    final password = passwordController.text;
+
+    // Signup হলে Name লাগবে
+    if (!isLogin && userName.isEmpty) {
+      showMessage('User Name দিন।');
+      return;
+    }
+
+    // বাংলাদেশি ফোন নম্বর যাচাই
+    if (!RegExp(r'^01[3-9]\d{8}$').hasMatch(phone)) {
+      showMessage('সঠিক ১১ সংখ্যার Phone Number দিন।');
+      return;
+    }
+
+    // Password
+    if (password.length < 6) {
+      showMessage('Password কমপক্ষে ৬ অক্ষরের হতে হবে।');
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      loading = true;
+    });
+
+    try {
+      final Map<String, dynamic> body = {
+        'action': isLogin ? 'login' : 'signup',
+        'phone': phone,
+        'password': password,
+      };
+
+      if (!isLogin) {
+        body['name'] = userName;
+      }
+
+      final response = await http
+          .post(
+            Uri.parse(functionUrl),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      Map<String, dynamic> data = {};
+
+      try {
+        final decoded = jsonDecode(response.body);
+
+        if (decoded is Map) {
+          data = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      // সফল
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          data['success'] == true) {
+        if (isLogin) {
+          final user = data['user'] is Map
+              ? Map<String, dynamic>.from(data['user'])
+              : <String, dynamic>{};
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HomePage(
+                userName: (user['name'] ?? 'Member').toString(),
+                phone: (user['phone'] ?? phone).toString(),
+              ),
+            ),
+          );
+        } else {
+          // Signup সফল হলে Login page দেখাবে
+          showMessage(
+            data['message']?.toString() ??
+                'Account সফলভাবে তৈরি হয়েছে। এখন Login করুন।',
+            success: true,
+          );
+
+          setState(() {
+            isLogin = true;
+            passwordController.clear();
+          });
+        }
+      } else {
+        showMessage(
+          data['error']?.toString() ??
+              data['message']?.toString() ??
+              'Server error (${response.statusCode})',
+        );
+      }
+    } on http.ClientException catch (e) {
+      showMessage('Network error: ${e.message}');
+    } catch (e) {
+      final error = e.toString();
+
+      if (error.contains('Failed host lookup')) {
+        showMessage(
+          'Supabase server খুঁজে পাওয়া যাচ্ছে না। Internet connection পরীক্ষা করুন।',
+        );
+      } else if (error.contains('TimeoutException')) {
+        showMessage(
+          'Server response দিতে বেশি সময় নিচ্ছে। আবার চেষ্টা করুন।',
+        );
+      } else {
+        showMessage('Connection error: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          isLogin ? 'সদস্য Login' : 'নতুন সদস্য নিবন্ধন',
+        ),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/club_logo.png',
-                  width: 150,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.sports_soccer, size: 100),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'কাঞ্চনপুর স্পোর্টিং ক্লাব',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(
+                    Icons.sports_soccer,
+                    size: 64,
                   ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'এটি একটি ক্রীড়া ও স্বেচ্ছাসেবী সংগঠন',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 28),
-                TextField(
-                  controller: phone,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    hintText: '018xxxxxxxx',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
+
+                  const SizedBox(height: 10),
+
+                  const Text(
+                    'Kanchanpur Sporting Club',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: password,
-                  obscureText: obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => obscure = !obscure),
-                      icon: Icon(
-                        obscure ? Icons.visibility : Icons.visibility_off,
+
+                  const SizedBox(height: 25),
+
+                  // Signup হলে Name দেখাবে
+                  if (!isLogin) ...[
+                    TextField(
+                      controller: nameController,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: 'User Name',
+                        prefixIcon: const Icon(Icons.person),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 15),
+                  ],
+
+                  // Phone
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number',
+                      hintText: '01XXXXXXXXX',
+                      prefixIcon: const Icon(Icons.phone),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: loading ? null : login,
-                    child: loading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'Login',
-                            style: TextStyle(fontSize: 17),
-                          ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: loading
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SignupPage(),
-                            ),
-                          );
+
+                  const SizedBox(height: 15),
+
+                  // Password
+                  TextField(
+                    controller: passwordController,
+                    obscureText: hidePassword,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => submit(),
+                    decoration: InputDecoration(
+                      labelText:
+                          isLogin ? 'Password' : 'New Password',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        onPressed: () {
+                          setState(() {
+                            hidePassword = !hidePassword;
+                          });
                         },
-                  child: const Text('নতুন সদস্য? Signup করুন'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+                        icon: Icon(
+                          hidePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
 
-// ============================================================
-// SIGNUP
-// ============================================================
+                  const SizedBox(height: 22),
 
-class SignupPage extends StatefulWidget {
-  const SignupPage({super.key});
+                  // Main button
+                  SizedBox(
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: loading ? null : submit,
+                      child: loading
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : Text(
+                              isLogin ? 'Login' : 'Sign Up',
+                              style: const TextStyle(
+                                fontSize: 17,
+                              ),
+                            ),
+                    ),
+                  ),
 
-  @override
-  State<SignupPage> createState() => _SignupPageState();
-}
+                  const SizedBox(height: 8),
 
-class _SignupPageState extends State<SignupPage> {
-  final name = TextEditingController();
-  final phone = TextEditingController();
-  final password = TextEditingController();
-  bool loading = false;
-  bool obscure = true;
-
-  Future<void> signup() async {
-    final nameText = name.text.trim();
-    final phoneText = phone.text.trim();
-    final passwordText = password.text;
-
-    if (nameText.isEmpty ||
-        phoneText.isEmpty ||
-        passwordText.isEmpty) {
-      showMsg('সব ঘর পূরণ করুন।');
-      return;
-    }
-
-    if (phoneText.replaceAll(RegExp(r'\D'), '').length < 10) {
-      showMsg('সঠিক Phone Number দিন।');
-      return;
-    }
-
-    if (passwordText.length < 6) {
-      showMsg('Password কমপক্ষে ৬ অক্ষরের হতে হবে।');
-      return;
-    }
-
-    setState(() => loading = true);
-
-    try {
-      final response = await supabase.functions.invoke(
-        edgeFunctionName,
-        body: {
-          'action': 'signup',
-          'name': nameText,
-          'phone': phoneText,
-          'password': passwordText,
-        },
-      );
-
-      if (response.data is! Map) {
-        showMsg('Server থেকে সঠিক response পাওয়া যায়নি।');
-        return;
-      }
-
-      final data = Map<String, dynamic>.from(response.data as Map);
-
-      if (data['success'] != true) {
-        showMsg(
-          data['error']?.toString() ?? 'Account তৈরি করা যায়নি।',
-        );
-        return;
-      }
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account সফলভাবে তৈরি হয়েছে। এখন Login করুন।'),
-        ),
-      );
-
-      Navigator.pop(context);
-    } on FunctionException catch (e) {
-      showMsg('Signup server error: ${e.details ?? e.reasonPhrase}');
-    } catch (e) {
-      showMsg('Signup করা যায়নি। আবার চেষ্টা করুন।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
-
-  @override
-  void dispose() {
-    name.dispose();
-    phone.dispose();
-    password.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('নতুন সদস্য নিবন্ধন')),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          const Text(
-            'নতুন সদস্য তৈরি করুন',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: name,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'User Name',
-              hintText: 'আপনার নাম',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: phone,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              hintText: '018xxxxxxxx',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: password,
-            obscureText: obscure,
-            decoration: InputDecoration(
-              labelText: 'New Password',
-              hintText: 'কমপক্ষে ৬ অক্ষর',
-              border: const OutlineInputBorder(),
-              prefixIcon: const Icon(Icons.lock),
-              suffixIcon: IconButton(
-                onPressed: () => setState(() => obscure = !obscure),
-                icon: Icon(
-                  obscure ? Icons.visibility : Icons.visibility_off,
-                ),
+                  // Login <-> Signup
+                  TextButton(
+                    onPressed: loading
+                        ? null
+                        : () {
+                            setState(() {
+                              isLogin = !isLogin;
+                              passwordController.clear();
+                            });
+                          },
+                    child: Text(
+                      isLogin
+                          ? 'নতুন সদস্য? Sign Up করুন'
+                          : 'আগে থেকেই অ্যাকাউন্ট আছে? Login করুন',
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: loading ? null : signup,
-              child: loading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text(
-                      'Create Account',
-                      style: TextStyle(fontSize: 17),
-                    ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ============================================================
-// HOME
-// ============================================================
+// ======================================================
+// HOME PAGE
+// ======================================================
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  final String userName;
+  final String phone;
 
-  bool get isAdmin {
-    final email = supabase.auth.currentUser?.email;
-    return email != null &&
-        email.toLowerCase() ==
-            phoneLoginEmail(adminPhone).toLowerCase();
-  }
-
-  Future<void> logout(BuildContext context) async {
-    await supabase.auth.signOut();
-
-    if (!context.mounted) return;
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
-  }
+  const HomePage({
+    super.key,
+    required this.userName,
+    required this.phone,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('কাঞ্চনপুর স্পোর্টিং ক্লাব'),
+        title: const Text('Kanchanpur Sporting Club'),
         actions: [
           IconButton(
-            onPressed: () => logout(context),
+            tooltip: 'Logout',
+            onPressed: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AuthPage(),
+                ),
+                (_) => false,
+              );
+            },
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Center(
-            child: Image.asset(
-              'assets/club_logo.png',
-              width: 190,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.sports_soccer, size: 120),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircleAvatar(
+              radius: 42,
+              child: Icon(
+                Icons.person,
+                size: 48,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Center(
-            child: Text(
-              'কাঞ্চনপুর স্পোর্টিং ক্লাব',
+
+            const SizedBox(height: 18),
+
+            const Text(
+              'Login সফল হয়েছে!',
               style: TextStyle(
-                fontSize: 27,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-          const Center(
-            child: Text('এটি একটি ক্রীড়া ও স্বেচ্ছাসেবী সংগঠন'),
-          ),
-          const SizedBox(height: 24),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.assignment),
-              title: const Text('নতুন সদস্যের জন্য আবেদন'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ApplicationPage(),
-                  ),
-                );
-              },
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.payments),
-              title: const Text('মাসিক চাঁদা / ডোনেশন'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const PaymentPage(),
-                  ),
-                );
-              },
-            ),
-          ),
-          if (isAdmin)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.admin_panel_settings),
-                title: const Text('Admin Panel'),
-                subtitle: const Text('শুধু Admin-এর জন্য'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AdminPage(),
-                    ),
-                  );
-                },
+
+            const SizedBox(height: 12),
+
+            Text(
+              userName,
+              style: const TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w600,
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
 
-// ============================================================
-// MEMBER APPLICATION
-// ============================================================
+            const SizedBox(height: 6),
 
-class ApplicationPage extends StatefulWidget {
-  const ApplicationPage({super.key});
-
-  @override
-  State<ApplicationPage> createState() => _ApplicationPageState();
-}
-
-class _ApplicationPageState extends State<ApplicationPage> {
-  final c = <String, TextEditingController>{
-    'নাম': TextEditingController(),
-    'পিতার নাম': TextEditingController(),
-    'মাতার নাম': TextEditingController(),
-    'জন্মসাল': TextEditingController(),
-    'এনআইডি/জন্মনিবন্ধন নাম্বার': TextEditingController(),
-    'জেলা': TextEditingController(),
-    'থানা': TextEditingController(),
-    'গ্রাম': TextEditingController(),
-    'মোবাইল নাম্বার': TextEditingController(),
-  };
-
-  String blood = 'A+';
-  XFile? photo;
-  bool loading = false;
-
-  Future<void> pickPhoto() async {
-    final p = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-    );
-
-    if (p != null) {
-      setState(() => photo = p);
-    }
-  }
-
-  Future<void> submit() async {
-    final user = supabase.auth.currentUser;
-
-    if (user == null) {
-      showMsg('আগে Login করুন।');
-      return;
-    }
-
-    for (final controller in c.values) {
-      if (controller.text.trim().isEmpty) {
-        showMsg('সব তথ্য পূরণ করুন।');
-        return;
-      }
-    }
-
-    setState(() => loading = true);
-
-    try {
-      await supabase.from('applications').insert({
-        'user_id': user.id,
-        'name': c['নাম']!.text.trim(),
-        'father_name': c['পিতার নাম']!.text.trim(),
-        'mother_name': c['মাতার নাম']!.text.trim(),
-        'birth_year': c['জন্মসাল']!.text.trim(),
-        'nid_or_birth_registration':
-            c['এনআইডি/জন্মনিবন্ধন নাম্বার']!.text.trim(),
-        'district': c['জেলা']!.text.trim(),
-        'upazila': c['থানা']!.text.trim(),
-        'village': c['গ্রাম']!.text.trim(),
-        'phone': c['মোবাইল নাম্বার']!.text.trim(),
-        'blood_group': blood,
-        'status': 'pending',
-      });
-
-      if (!mounted) return;
-
-      showMsg('আবেদন সফলভাবে জমা হয়েছে।');
-      Navigator.pop(context);
-    } on PostgrestException catch (e) {
-      showMsg('আবেদন সংরক্ষণ হয়নি: ${e.message}');
-    } catch (e) {
-      showMsg('আবেদন জমা দিতে সমস্যা হয়েছে।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
-
-  Widget field(String label) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: TextField(
-        controller: c[label],
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    for (final controller in c.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('নতুন সদস্যের জন্য আবেদন')),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: field('নাম')),
-              const SizedBox(width: 12),
-              Column(
-                children: [
-                  CircleAvatar(
-                    radius: 42,
-                    backgroundImage: photo == null
-                        ? null
-                        : FileImage(File(photo!.path)),
-                    child: photo == null
-                        ? const Icon(Icons.person, size: 40)
-                        : null,
-                  ),
-                  TextButton(
-                    onPressed: pickPhoto,
-                    child: const Text('ছবি আপলোড'),
-                  ),
-                ],
+            Text(
+              phone,
+              style: const TextStyle(
+                fontSize: 17,
               ),
-            ],
-          ),
-          for (final x in [
-            'পিতার নাম',
-            'মাতার নাম',
-            'জন্মসাল',
-            'এনআইডি/জন্মনিবন্ধন নাম্বার',
-            'জেলা',
-            'থানা',
-            'গ্রাম',
-          ])
-            field(x),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: blood,
-            decoration: const InputDecoration(
-              labelText: 'রক্তের গ্রুপ',
-              border: OutlineInputBorder(),
             ),
-            items: const [
-              'A+',
-              'A-',
-              'B+',
-              'B-',
-              'AB+',
-              'AB-',
-              'O+',
-              'O-',
-            ]
-                .map(
-                  (x) => DropdownMenuItem(
-                    value: x,
-                    child: Text(x),
-                  ),
-                )
-                .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => blood = v);
-            },
-          ),
-          field('মোবাইল নাম্বার'),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: loading ? null : submit,
-              child: loading
-                  ? const CircularProgressIndicator()
-                  : const Text('Submit'),
+
+            const SizedBox(height: 25),
+
+            const Text(
+              'Kanchanpur Sporting Club-এ স্বাগতম।',
+              style: TextStyle(fontSize: 16),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================
-// PAYMENT
-// ============================================================
-
-class PaymentPage extends StatefulWidget {
-  const PaymentPage({super.key});
-
-  @override
-  State<PaymentPage> createState() => _PaymentPageState();
-}
-
-class _PaymentPageState extends State<PaymentPage> {
-  String method = 'বিকাশ';
-  final amount = TextEditingController();
-  final trx = TextEditingController();
-  bool loading = false;
-
-  Future<void> submitPayment() async {
-    final user = supabase.auth.currentUser;
-
-    if (user == null) {
-      showMsg('আগে Login করুন।');
-      return;
-    }
-
-    if (amount.text.trim().isEmpty || trx.text.trim().isEmpty) {
-      showMsg('টাকার পরিমাণ ও Transaction ID দিন।');
-      return;
-    }
-
-    setState(() => loading = true);
-
-    try {
-      await supabase.from('payments').insert({
-        'user_id': user.id,
-        'method': method,
-        'amount': double.tryParse(amount.text.trim()) ?? 0,
-        'transaction_id': trx.text.trim(),
-        'status': 'pending',
-      });
-
-      if (!mounted) return;
-
-      showMsg('পেমেন্ট তথ্য জমা হয়েছে।');
-      amount.clear();
-      trx.clear();
-    } on PostgrestException catch (e) {
-      showMsg('পেমেন্ট সংরক্ষণ হয়নি: ${e.message}');
-    } catch (e) {
-      showMsg('পেমেন্ট জমা দিতে সমস্যা হয়েছে।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
-
-  @override
-  void dispose() {
-    amount.dispose();
-    trx.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('মাসিক চাঁদা / ডোনেশন')),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          const Text(
-            'মাসিক চাঁদা / ডোনেশন',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Column(
-              children: [
-                RadioListTile<String>(
-                  value: 'বিকাশ',
-                  groupValue: method,
-                  title: const Text('বিকাশ'),
-                  subtitle: const Text('Personal • 01897173332'),
-                  onChanged: (v) {
-                    if (v != null) setState(() => method = v);
-                  },
-                ),
-                RadioListTile<String>(
-                  value: 'নগদ',
-                  groupValue: method,
-                  title: const Text('নগদ'),
-                  subtitle: const Text('Personal • 01897173332'),
-                  onChanged: (v) {
-                    if (v != null) setState(() => method = v);
-                  },
-                ),
-                RadioListTile<String>(
-                  value: 'রকেট',
-                  groupValue: method,
-                  title: const Text('রকেট'),
-                  subtitle: const Text('01897173332'),
-                  onChanged: (v) {
-                    if (v != null) setState(() => method = v);
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: amount,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'টাকার পরিমাণ',
-              prefixText: '৳ ',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: trx,
-            decoration: const InputDecoration(
-              labelText: 'Transaction ID',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: loading ? null : submitPayment,
-              child: loading
-                  ? const CircularProgressIndicator()
-                  : const Text('Payment Submit'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================
-// ADMIN PANEL
-// ============================================================
-
-class AdminPage extends StatefulWidget {
-  const AdminPage({super.key});
-
-  @override
-  State<AdminPage> createState() => _AdminPageState();
-}
-
-class _AdminPageState extends State<AdminPage> {
-  int applications = 0;
-  int payments = 0;
-  int members = 0;
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    loadData();
-  }
-
-  Future<void> loadData() async {
-    setState(() => loading = true);
-
-    try {
-      final apps = await supabase.from('applications').select('id');
-      final pays = await supabase.from('payments').select('id');
-      final profiles = await supabase.from('profiles').select('id');
-
-      if (!mounted) return;
-
-      setState(() {
-        applications = (apps as List).length;
-        payments = (pays as List).length;
-        members = (profiles as List).length;
-      });
-    } catch (e) {
-      showMsg('Admin data পাওয়া যায়নি।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Panel'),
-        actions: [
-          IconButton(
-            onPressed: loadData,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(18),
-              children: [
-                adminCard(
-                  Icons.assignment,
-                  'Applications',
-                  '$applications',
-                  'Pending / Approved / Rejected',
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AdminApplicationsPage(),
-                      ),
-                    );
-                  },
-                ),
-                adminCard(
-                  Icons.payments,
-                  'Payments',
-                  '$payments',
-                  'Transaction verification',
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AdminPaymentsPage(),
-                      ),
-                    );
-                  },
-                ),
-                adminCard(
-                  Icons.people,
-                  'Members',
-                  '$members',
-                  'Approved member list',
-                  () {},
-                ),
-                adminCard(
-                  Icons.bar_chart,
-                  'Reports',
-                  '—',
-                  'Monthly collection report',
-                  () {},
-                ),
-              ],
-            ),
-    );
-  }
-
-  Widget adminCard(
-    IconData icon,
-    String title,
-    String value,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: Text(
-          value,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          ],
         ),
-        onTap: onTap,
       ),
-    );
-  }
-}
-
-// ============================================================
-// ADMIN APPLICATION LIST
-// ============================================================
-
-class AdminApplicationsPage extends StatefulWidget {
-  const AdminApplicationsPage({super.key});
-
-  @override
-  State<AdminApplicationsPage> createState() =>
-      _AdminApplicationsPageState();
-}
-
-class _AdminApplicationsPageState
-    extends State<AdminApplicationsPage> {
-  List<Map<String, dynamic>> rows = [];
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    setState(() => loading = true);
-
-    try {
-      final data = await supabase
-          .from('applications')
-          .select()
-          .order('created_at', ascending: false);
-
-      if (!mounted) return;
-
-      setState(() {
-        rows = List<Map<String, dynamic>>.from(data);
-      });
-    } catch (e) {
-      showMsg('Applications পড়া যায়নি।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Future<void> changeStatus(String id, String status) async {
-    try {
-      await supabase
-          .from('applications')
-          .update({'status': status})
-          .eq('id', id);
-
-      await load();
-    } catch (e) {
-      showMsg('Status পরিবর্তন হয়নি।');
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Applications')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : rows.isEmpty
-              ? const Center(child: Text('কোনো আবেদন নেই।'))
-              : RefreshIndicator(
-                  onRefresh: load,
-                  child: ListView.builder(
-                    itemCount: rows.length,
-                    itemBuilder: (context, index) {
-                      final row = rows[index];
-                      final id = row['id'].toString();
-                      final name =
-                          row['name']?.toString() ?? 'নাম নেই';
-                      final phone =
-                          row['phone']?.toString() ?? '';
-                      final status =
-                          row['status']?.toString() ?? 'pending';
-
-                      return Card(
-                        margin: const EdgeInsets.all(8),
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.person),
-                          ),
-                          title: Text(name),
-                          subtitle: Text(
-                            '$phone\nStatus: $status',
-                          ),
-                          isThreeLine: true,
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) =>
-                                changeStatus(id, value),
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'approved',
-                                child: Text('Approve'),
-                              ),
-                              PopupMenuItem(
-                                value: 'rejected',
-                                child: Text('Reject'),
-                              ),
-                              PopupMenuItem(
-                                value: 'pending',
-                                child: Text('Pending'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-    );
-  }
-}
-
-// ============================================================
-// ADMIN PAYMENT LIST
-// ============================================================
-
-class AdminPaymentsPage extends StatefulWidget {
-  const AdminPaymentsPage({super.key});
-
-  @override
-  State<AdminPaymentsPage> createState() =>
-      _AdminPaymentsPageState();
-}
-
-class _AdminPaymentsPageState extends State<AdminPaymentsPage> {
-  List<Map<String, dynamic>> rows = [];
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    setState(() => loading = true);
-
-    try {
-      final data = await supabase
-          .from('payments')
-          .select()
-          .order('created_at', ascending: false);
-
-      if (!mounted) return;
-
-      setState(() {
-        rows = List<Map<String, dynamic>>.from(data);
-      });
-    } catch (e) {
-      showMsg('Payments পড়া যায়নি।');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Future<void> changeStatus(String id, String status) async {
-    try {
-      await supabase
-          .from('payments')
-          .update({'status': status})
-          .eq('id', id);
-
-      await load();
-    } catch (e) {
-      showMsg('Payment status পরিবর্তন হয়নি।');
-    }
-  }
-
-  void showMsg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Payments')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : rows.isEmpty
-              ? const Center(child: Text('কোনো payment নেই।'))
-              : RefreshIndicator(
-                  onRefresh: load,
-                  child: ListView.builder(
-                    itemCount: rows.length,
-                    itemBuilder: (context, index) {
-                      final row = rows[index];
-                      final id = row['id'].toString();
-                      final method =
-                          row['method']?.toString() ?? '';
-                      final amount =
-                          row['amount']?.toString() ?? '0';
-                      final trx =
-                          row['transaction_id']?.toString() ?? '';
-                      final status =
-                          row['status']?.toString() ?? 'pending';
-
-                      return Card(
-                        margin: const EdgeInsets.all(8),
-                        child: ListTile(
-                          leading: const Icon(Icons.payments),
-                          title: Text('$method • ৳$amount'),
-                          subtitle: Text(
-                            'Transaction: $trx\nStatus: $status',
-                          ),
-                          isThreeLine: true,
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) =>
-                                changeStatus(id, value),
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'approved',
-                                child: Text('Approve'),
-                              ),
-                              PopupMenuItem(
-                                value: 'rejected',
-                                child: Text('Reject'),
-                              ),
-                              PopupMenuItem(
-                                value: 'pending',
-                                child: Text('Pending'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
     );
   }
 }

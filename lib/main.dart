@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:io';import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,7 +11,12 @@ const supabasePublishableKey =
 final supabase = Supabase.instance.client;
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();try {
+  final result = await InternetAddress.lookup('vleaqmiyihlginevgfmw.supabase.co');
+  debugPrint('DNS TEST SUCCESS: $result');
+} catch (e) {
+  debugPrint('DNS TEST FAILED: $e');
+}
 
   await Supabase.initialize(
     url: supabaseUrl,

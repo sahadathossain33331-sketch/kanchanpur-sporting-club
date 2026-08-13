@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const supabaseUrl = 'https://vleaqmiyihlginevgfmw.supabase.co';
+
 const supabasePublishableKey =
     'sb_publishable_7D6mwaP16HzmYQTtr71icQ__JksJ9KJ';
 
@@ -14,14 +15,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-  url: 'https://vleaqmiyihlginevgfmw.supabase.co',
-  publishableKey: supabasePublishableKey,
-);
-    
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
+  );
+
   runApp(const KanchanpurApp());
 }
     
-class KanchanpurApp extends StatelessWidget {
+    class KanchanpurApp extends StatelessWidget {
   const KanchanpurApp({super.key});
 
   @override

@@ -228,8 +228,16 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   String authEmail(String mobile) {
-    return '${normalizePhone(mobile)}@ksc.app';
-  }
+  final normalized = normalizePhone(mobile);
+
+  // 018XXXXXXXX → 88018XXXXXXXX
+  final international =
+      normalized.startsWith('0')
+          ? '88$normalized'
+          : normalized;
+
+  return '$international@phone-login.local';
+}
 
   Future<void> submit() async {
     final username = name.text.trim();

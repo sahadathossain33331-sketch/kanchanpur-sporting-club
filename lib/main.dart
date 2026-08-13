@@ -315,7 +315,7 @@ class _AuthPageState extends State<AuthPage> {
         // =========================
 
         // পুরোনো session থাকলে আগে সম্পূর্ণ Sign Out
-        await supabase.auth.signOut();
+        
 
         // Supabase Authentication দিয়ে সত্যিকারের Login
         final result = await supabase.auth.signInWithPassword(

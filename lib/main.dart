@@ -22,7 +22,7 @@ Future<void> main() async {
   runApp(const KanchanpurApp());
 }
     
-    class KanchanpurApp extends StatelessWidget {
+   class KanchanpurApp extends StatelessWidget {
   const KanchanpurApp({super.key});
 
   @override

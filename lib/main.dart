@@ -11,26 +11,16 @@ const supabasePublishableKey =
 final supabase = Supabase.instance.client;
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();try {
-  final result = await InternetAddress.lookup('vleaqmiyihlginevgfmw.supabase.co');
-  debugPrint('DNS TEST SUCCESS: $result');
-} catch (e) {
-  debugPrint('DNS TEST FAILED: $e');
-}
+  WidgetsFlutterBinding.ensureInitialized();
 
-  final httpClient = Platform.isAndroid
-    ? CronetClient.defaultCronetEngine()
-    : null;
-
-await Supabase.initialize(
-  url: supabaseUrl,
-  publishableKey: supabasePublishableKey,
-  httpClient: httpClient,
-);
+  await Supabase.initialize(
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
+  );
 
   runApp(const KanchanpurApp());
 }
-
+    
 class KanchanpurApp extends StatelessWidget {
   const KanchanpurApp({super.key});
 

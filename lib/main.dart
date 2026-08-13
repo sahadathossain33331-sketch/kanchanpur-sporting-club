@@ -1,8 +1,10 @@
-import 'dart:io';import 'dart:typed_data';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cronet_http/cronet_http.dart';
 
 const supabaseUrl = 'https://vleaqmiyihlginevgfmw.supabase.co';
 const supabasePublishableKey =
@@ -18,10 +20,15 @@ Future<void> main() async {
   debugPrint('DNS TEST FAILED: $e');
 }
 
-  await Supabase.initialize(
-    url: supabaseUrl,
-    publishableKey: supabasePublishableKey,
-  );
+  final httpClient = Platform.isAndroid
+    ? CronetClient.defaultCronetEngine()
+    : null;
+
+await Supabase.initialize(
+  url: supabaseUrl,
+  publishableKey: supabasePublishableKey,
+  httpClient: httpClient,
+);
 
   runApp(const KanchanpurApp());
 }

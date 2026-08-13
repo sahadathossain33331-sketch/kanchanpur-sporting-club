@@ -1558,19 +1558,22 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-     return Scaffold(
-  appBar: AppBar(title: const Text('About')),
-  body: ...
-);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('About'),
+      ),
       body: Center(
         child: Padding(
-          padding: EdgeInsets.all(25),
+          padding: const EdgeInsets.all(25),
           child: Text(
-            'এই Apps টি কাঞ্চনপুর মানুষদের জন্য বানানো হয়েছে।\n\n'
+            'এই Apps টি কাঞ্চনপুর মানুষের জন্য বানানো হয়েছে।\n\n'
             'Apps. SEO- শাহাদাত হোসেন রাজু\n'
-            'প্রচার সম্পাদক, কাঞ্চনপুর স্পোর্টিং ক্লাব',
+            'প্রধান সম্পাদক, কাঞ্চনপুর স্পোর্টিং ক্লাব',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, height: 1.8),
+            style: const TextStyle(
+              fontSize: 18,
+              height: 1.8,
+            ),
           ),
         ),
       ),

@@ -15,7 +15,7 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: supabaseUrl,
-    anonKey: supabasePublishableKey,
+    anonKey: sb_publishable_7D6mwaP16HzmYQTtr71icQ__JksJ9KJ,
   );
 
   runApp(const KanchanpurApp());

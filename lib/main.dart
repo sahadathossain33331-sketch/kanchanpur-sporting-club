@@ -14,10 +14,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: supabaseUrl,
-    publishableKey: supabasePublishableKey,
-  );
-
+  url: 'https://vleaqmiyihlginevgfmw.supabase.co',
+  publishableKey: supabasePublishableKey,
+);
+    
   runApp(const KanchanpurApp());
 }
     

@@ -1558,8 +1558,10 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      appBar: AppBar(title: Text('About')),
+     return Scaffold(
+  appBar: AppBar(title: const Text('About')),
+  body: ...
+);
       body: Center(
         child: Padding(
           padding: EdgeInsets.all(25),

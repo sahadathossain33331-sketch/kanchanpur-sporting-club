@@ -310,44 +310,23 @@ class _AuthPageState extends State<AuthPage> {
           });
         }
       } else {
-        // =========================
-        // Login
-        // =========================
+  // পুরোনো session শুধু এই ফোন থেকে মুছে ফেলবে।
+  // Server-এ sign-out request করবে না।
+  await supabase.auth.signOut(
+    scope: SignOutScope.local,
+  );
 
-        // পুরোনো session থাকলে আগে সম্পূর্ণ Sign Out
-        
+  final result = await supabase.auth.signInWithPassword(
+    email: email,
+    password: pass,
+  );
 
-        // Supabase Authentication দিয়ে সত্যিকারের Login
-        final result = await supabase.auth.signInWithPassword(
-          email: email,
-          password: pass,
-        );
+  if (result.user == null || result.session == null) {
+    throw Exception('Login ব্যর্থ হয়েছে।');
+  }
 
-        final loggedUser = result.user;
-
-        // Supabase authentication সফল না হলে Home Page নয়
-        if (loggedUser == null || result.session == null) {
-          throw Exception('Mobile Number অথবা Password ভুল।');
-        }
-
-        // Login সফল হলেও profiles-এ account না থাকলে Home Page নয়
-        final profileRow = await supabase
-            .from('profiles')
-            .select()
-            .eq('id', loggedUser.id)
-            .maybeSingle();
-
-        if (profileRow == null) {
-          await supabase.auth.signOut();
-          throw Exception(
-            'এই account-এর profile পাওয়া যায়নি। Admin-এর সাথে যোগাযোগ করুন।',
-          );
-        }
-
-        if (!mounted) return;
-
-        _msg('Login সফল হয়েছে।');
-      }
+  _msg('Login সফল হয়েছে।');
+}
     } on AuthException catch (e) {
       if (mounted) {
         _msg(

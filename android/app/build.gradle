@@ -7,7 +7,6 @@ plugins {
 
 android {
     namespace "com.kanchanpur.sportingclub"
-    compileSdk 35
 
     defaultConfig {
         applicationId "com.kanchanpur.sportingclub"
@@ -16,6 +15,7 @@ android {
         versionCode 1
         versionName "1.0.0"
     }
+}
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

@@ -1,3 +1,4 @@
+
 name: Build Flutter APK
 
 on:
@@ -56,118 +57,146 @@ jobs:
           cp -r /tmp/lib lib
           cp /tmp/pubspec.yaml pubspec.yaml
 
-      - name: Configure Android package
+      - name: Configure Android Gradle
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          candidates = [
-              Path("android/app/build.gradle.kts"),
-              Path("android/app/build.gradle"),
-          ]
+          settings = Path("android/settings.gradle.kts")
 
-          app_file = None
-
-          for file in candidates:
-              if file.exists():
-                  app_file = file
-                  break
-
-          if app_file is None:
-              print("ERROR: Android app Gradle file was not found.")
+          if not settings.exists():
+              print("ERROR: android/settings.gradle.kts not found.")
               raise SystemExit(1)
 
-          text = app_file.read_text()
+          text = settings.read_text()
 
-          replacements = {
-              "com.example.kanchanpur_sporting_club": "Com.Ksc",
-              "com.example.kanchanpurSportingClub": "Com.Ksc",
-          }
+          # Fix Kotlin Android plugin version
+          kotlin_pattern = r'id\("org\.jetbrains\.kotlin\.android"\)(?:\s+version\s+"[^"]+")?(?:\s+apply\s+false)?'
 
-          for old, new in replacements.items():
-              text = text.replace(old, new)
+          kotlin_replacement = (
+              'id("org.jetbrains.kotlin.android") '
+              'version "2.2.20" apply false'
+          )
 
-          if app_file.name.endswith(".kts"):
-              if 'id("com.google.gms.google-services")' not in text:
-                  text = text.replace(
-                      'id("dev.flutter.flutter-gradle-plugin")',
-                      'id("dev.flutter.flutter-gradle-plugin")\n    id("com.google.gms.google-services")'
-                  )
+          if re.search(kotlin_pattern, text):
+              text = re.sub(
+                  kotlin_pattern,
+                  kotlin_replacement,
+                  text
+              )
           else:
-              if 'id "com.google.gms.google-services"' not in text:
+              # Add Kotlin plugin if it does not exist
+              marker = 'plugins {'
+              if marker in text:
                   text = text.replace(
-                      'id "dev.flutter.flutter-gradle-plugin"',
-                      'id "dev.flutter.flutter-gradle-plugin"\n    id "com.google.gms.google-services"'
+                      marker,
+                      marker + '\n    ' + kotlin_replacement,
+                      1
+                  )
+              else:
+                  text = (
+                      'pluginManagement {\n'
+                      '    repositories {\n'
+                      '        google()\n'
+                      '        mavenCentral()\n'
+                      '        gradlePluginPortal()\n'
+                      '    }\n'
+                      '}\n\n'
+                      'plugins {\n'
+                      '    ' + kotlin_replacement + '\n'
+                      '}\n\n'
+                      + text
                   )
 
-          app_file.write_text(text)
+          # Add Google Services plugin with a fixed version
+          google_plugin = (
+              'id("com.google.gms.google-services") '
+              'version "4.4.4" apply false'
+          )
 
-          print(f"Configured: {app_file}")
+          if 'id("com.google.gms.google-services")' not in text:
+              marker = 'plugins {'
+              text = text.replace(
+                  marker,
+                  marker + '\n    ' + google_plugin,
+                  1
+              )
+          else:
+              google_pattern = (
+                  r'id\("com\.google\.gms\.google-services"\)'
+                  r'(?:\s+version\s+"[^"]+")?(?:\s+apply\s+false)?'
+              )
+
+              text = re.sub(
+                  google_pattern,
+                  google_plugin,
+                  text
+              )
+
+          settings.write_text(text)
+
+          print("===== FINAL settings.gradle.kts =====")
+          print(text)
           PY
 
-      - name: Configure Google Services plugin
+      - name: Configure Android application plugin
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          candidates = [
-              Path("android/settings.gradle.kts"),
-              Path("android/settings.gradle"),
-          ]
+          app = Path("android/app/build.gradle.kts")
 
-          settings_file = None
-
-          for file in candidates:
-              if file.exists():
-                  settings_file = file
-                  break
-
-          if settings_file is None:
-              print("ERROR: Android settings.gradle file not found.")
+          if not app.exists():
+              print("ERROR: android/app/build.gradle.kts not found.")
               raise SystemExit(1)
 
-          text = settings_file.read_text()
+          text = app.read_text()
 
-          if settings_file.name.endswith(".kts"):
-              if 'id("com.google.gms.google-services")' not in text:
-                  marker = 'id("org.jetbrains.kotlin.android")'
-                  if marker in text:
-                      text = text.replace(
-                          marker,
-                          marker + '\n    id("com.google.gms.google-services") version "4.4.4" apply false'
-                      )
-                  else:
-                      print("ERROR: Kotlin Android plugin line not found.")
-                      raise SystemExit(1)
-          else:
-              if 'id "com.google.gms.google-services"' not in text:
-                  marker = 'id "org.jetbrains.kotlin.android"'
-                  if marker in text:
-                      text = text.replace(
-                          marker,
-                          marker + '\n    id "com.google.gms.google-services" version "4.4.4" apply false'
-                      )
-                  else:
-                      print("ERROR: Kotlin Android plugin line not found.")
-                      raise SystemExit(1)
+          # Make sure Google Services plugin is applied
+          if 'id("com.google.gms.google-services")' not in text:
+              marker = 'plugins {'
+              if marker in text:
+                  text = text.replace(
+                      marker,
+                      marker + '\n    id("com.google.gms.google-services")',
+                      1
+                  )
 
-          settings_file.write_text(text)
+          # Set package/application ID
+          text = text.replace(
+              'com.example.kanchanpur_sporting_club',
+              'Com.Ksc'
+          )
 
-          print(f"Configured: {settings_file}")
+          text = text.replace(
+              'com.example.kanchanpurSportingClub',
+              'Com.Ksc'
+          )
+
+          app.write_text(text)
+
+          print("===== FINAL android/app/build.gradle.kts =====")
+          print(text)
           PY
 
       - name: Verify Firebase configuration
         run: |
-          echo "===== Firebase configuration ====="
+          echo "===== Firebase file ====="
           ls -lh android/app/google-services.json
 
           echo "===== Android Gradle files ====="
           find android -maxdepth 2 -type f \
-            \( -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            \( -name "build.gradle" \
+            -o -name "build.gradle.kts" \
+            -o -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \) \
             -print
 
       - name: Get dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
 
       - name: Generate Firebase SHA fingerprints
         run: |
@@ -188,13 +217,15 @@ jobs:
           keytool -list -v \
             -keystore ~/.android/debug.keystore \
             -storepass android \
-            -alias androiddebugkey | grep -E "SHA1:|SHA256:"
+            -alias androiddebugkey | grep -E "SHA1:|SHA256:" || true
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: kanchanpur-sporting-club-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+

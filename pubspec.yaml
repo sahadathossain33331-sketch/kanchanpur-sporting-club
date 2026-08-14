@@ -10,10 +10,16 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Firebase
   firebase_core: ^4.12.1
   firebase_auth: ^6.5.6
   cloud_firestore: ^6.7.1
   firebase_storage: ^13.4.5
+
+  # Supabase
+  supabase_flutter: ^2.10.0
+
+  # Image
   image_picker: ^1.1.2
 
 dev_dependencies:

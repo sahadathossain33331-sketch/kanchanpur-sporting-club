@@ -1,4 +1,3 @@
-
 name: Build Flutter APK
 
 on:
@@ -18,26 +17,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Generate Firebase SHA fingerprints
-        run: |
-          mkdir -p ~/.android
-          keytool -genkeypair -v \
-            -keystore ~/.android/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-          echo "===== FIREBASE SHA FINGERPRINTS ====="
-
-          keytool -list -v \
-            -keystore ~/.android/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey | grep -E "SHA1:|SHA256:"
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -45,8 +24,91 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Save Firebase configuration
+        run: |
+          if [ -f android/app/google-services.json ]; then
+            cp android/app/google-services.json /tmp/google-services.json
+            echo "Firebase configuration saved."
+          else
+            echo "WARNING: google-services.json not found."
+          fi
+
+      - name: Recreate Android project
+        run: |
+          rm -rf android
+          flutter create --platforms=android .
+
+      - name: Restore Firebase configuration
+        run: |
+          if [ -f /tmp/google-services.json ]; then
+            mkdir -p android/app
+            cp /tmp/google-services.json android/app/google-services.json
+            echo "Firebase configuration restored."
+          fi
+
+      - name: Configure Android package
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/app/build.gradle")
+          text = path.read_text()
+
+          text = text.replace(
+              'namespace = "com.example.kanchanpur_sporting_club"',
+              'namespace = "Com.Ksc"'
+          )
+
+          text = text.replace(
+              'namespace "com.example.kanchanpur_sporting_club"',
+              'namespace "Com.Ksc"'
+          )
+
+          text = text.replace(
+              'applicationId = "com.example.kanchanpur_sporting_club"',
+              'applicationId = "Com.Ksc"'
+          )
+
+          text = text.replace(
+              'applicationId "com.example.kanchanpur_sporting_club"',
+              'applicationId "Com.Ksc"'
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Check Firebase file
+        run: |
+          if [ -f android/app/google-services.json ]; then
+            echo "google-services.json exists."
+          else
+            echo "ERROR: google-services.json is missing."
+            exit 1
+          fi
+
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Generate Firebase SHA fingerprints
+        run: |
+          mkdir -p ~/.android
+
+          keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" || true
+
+          echo "===== FIREBASE SHA FINGERPRINTS ====="
+
+          keytool -list -v \
+            -keystore ~/.android/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey | grep -E "SHA1:|SHA256:"
 
       - name: Build release APK
         run: flutter build apk --release
@@ -56,4 +118,3 @@ jobs:
         with:
           name: kanchanpur-sporting-club-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-

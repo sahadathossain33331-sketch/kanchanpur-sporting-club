@@ -14,8 +14,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: sb_publishable_7D6mwaP16HzmYQTtr71icQ__JksJ9KJ,
+  url: supabaseUrl,
+  anonKey: supabasePublishableKey,
   );
 
   runApp(const KanchanpurApp());

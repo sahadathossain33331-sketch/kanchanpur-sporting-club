@@ -2,21 +2,15 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-const supabaseUrl = 'https://vleaqmiyihlginevgfmw.supabase.co';
-const supabasePublishableKey =
-    'sb_publishable_7D6mwaP16HzmYQTtr71icQ__JksJ9KJ';
-
-final supabase = Supabase.instance.client;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Supabase.initialize(
-  url: supabaseUrl,
-  anonKey: supabasePublishableKey,
-  );
+  await Firebase.initializeApp();
 
   runApp(const KanchanpurApp());
 }

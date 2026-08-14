@@ -15,14 +15,32 @@ final storage = FirebaseStorage.instance;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const KanchanpurApp());
-}
 
-class KanchanpurApp extends StatelessWidget {
-  const KanchanpurApp({super.key});
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    runApp(const KanchanpurApp());
+  } catch (e) {
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'Firebase চালু করতে সমস্যা হয়েছে:\n\n\$e',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
   @override
   Widget build(BuildContext context) {

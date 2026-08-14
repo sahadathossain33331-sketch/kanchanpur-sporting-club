@@ -1,26 +1,24 @@
-plugins {
-    id "com.android.application"
-    id "org.jetbrains.kotlin.android"
-    id "com.google.gms.google-services"
-}
-
-android {
-    namespace "Com.Ksc"
-    compileSdk 35
-
-    defaultConfig {
-        applicationId "Com.Ksc"
-        minSdk 23
-        targetSdk 35
-        versionCode 1
-        versionName "1.0.0"
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
     }
 }
 
-dependencies {
-    implementation platform("com.google.firebase:firebase-bom:33.10.0")
 
-    implementation "com.google.firebase:firebase-auth"
-    implementation "com.google.firebase:firebase-firestore"
-    implementation "com.google.firebase:firebase-storage"
+rootProject.buildDir = "../build"
+
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
 }

@@ -41,8 +41,7 @@ Future<void> main() async {
     );
   }
 }
-
-  @override
+class KanchanpurApp extends StatelessWidget { const KanchanpurApp({super.key});
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,

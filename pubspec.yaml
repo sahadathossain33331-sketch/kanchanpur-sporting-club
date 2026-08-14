@@ -16,9 +16,6 @@ dependencies:
   cloud_firestore: ^6.7.1
   firebase_storage: ^13.4.5
 
-  # Supabase
-  supabase_flutter: ^2.10.0
-
   # Image
   image_picker: ^1.1.2
 
